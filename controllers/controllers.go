@@ -1,23 +1,44 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
+	"github.com/vikas-gautam/ecommerce-cart/database"
 	"github.com/vikas-gautam/ecommerce-cart/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/crypto/bcrypt"
 )
 
-func HashPassword(password string) string {
+var UserCollection *mongo.Collection = database.Userdata(database.Client, "Users")
+var ProductCollection *mongo.Collection = database.ProductData(database.Client, "Products")
+var Validate = validator.New()
 
+func HashPassword(password string) string {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
+	if err != nil{
+		log.Panic(err)
+	}
+	return string(bytes)
 }
 
 func VerifyPassword(userPassword string, givenPassword string) (bool, string) {
+	err := bcrypt.CompareHashAndPassword([]byte(givenPassword), []byte(userPassword))
+	valid := true
+	msg := ""
 
+	if err != nil{
+		msg = "Login or password is incorrect"
+		valid = false
+	}
+	return valid, msg
 }
 
 func Signup() {
@@ -122,6 +143,38 @@ func Login() {
 
 func ProductviewerAdmin() {}
 
-func SearchProduct() {}
+func SearchProduct() gin.HandlerFunc{
+	return func(c *gin.Context){
+		var productList []models.Product
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		defer cancel()
 
-func SearchProductByQuery() {}
+		ProductCollection.Find(ctx, bson.D{{}})
+		if err != nil{
+			c.IndentedJSON(http.StatusInternalServerError, "something went wrong, please try after some time")
+			return
+		}
+
+		err = cursor.All(ctx, &productList)
+		if err != nil{
+			log.Println(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		defer cursor.Close()
+
+		if err := cursor.err(); err != nil {
+			log.Println(err)
+			c.IndentedJSON(400, "invalid")
+			return
+		}
+
+		defer cancel()
+		c.IndentedJSON(200, productList)
+	}
+}
+
+func SearchProductByQuery() gin.HandlerFunc{
+	
+}
